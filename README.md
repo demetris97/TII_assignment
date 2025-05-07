@@ -1,8 +1,3 @@
-ERRORS:
-1. Inside the dockerfile, is specifying the version of ROS to be downloaded. This threw error while creating the image. I removed the version entirely.
-2. For some reason (didn't had time to troubleshoot), Gazebo did't installed directly from the dockerfile (I included the commands for Gazebo installation inside the Dockerfile). So, Gazebo needs manual installation from the docker container, using the following command:
-$curl -sSL http://get.gazebosim.org | sh
-
 HOW TO RUN THE SIMULATION:
 1. Enable access to xhost from the container:
 $xhost +local:root
@@ -23,7 +18,7 @@ $curl -sSL http://get.gazebosim.org | sh
 
 4. On the terminal within the container,run the PX4 along with the Gazebo. Run the following commands (the second command will need some time to complete):
 $ cd /PX4-Autopilot
-$ make px4_sitl_default gazebo-classic
+$ make px4_sitl_default gazebo-classic_standard_vtol
 
 5. Open a new terminal and get inside the docker container:
 $ docker exec -it <container_id> bash
@@ -37,4 +32,7 @@ $source /opt/ros/humble/setup.bash
 $source /root/px4_ros_com_ros2/install/setup.bash
 $ros2 run px4_ros_com offboard_control => arms and lands the drone.
 
-more examples (offroad mission):https://docs.px4.io/v1.12/en/ros/ros2_offboard_control.html 
+ERRORS AND SOLUTIONS:
+1. Inside the original dockerfile for the assignment, specifying the version of ROS to be downloaded. This threw error while creating the image. I removed the version entirely.
+2. For some reason (didn't had time to troubleshoot), Gazebo did't installed directly from the dockerfile (I included the commands for Gazebo installation inside the Dockerfile). So, Gazebo needs manual installation from the docker container, using the following command:
+$curl -sSL http://get.gazebosim.org | sh
