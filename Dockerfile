@@ -95,15 +95,25 @@ RUN mkdir build && cd build && cmake .. && make && make install
 # Update the linker cache
 RUN sudo ldconfig /usr/local/lib/
 
-# INSTALL PX4-ROS2 BRIDGE
+# INSTALL PX4-ROS2 BRIDGE: https://docs.px4.io/v1.12/en/ros/ros2_comm.html#install-fast-dds
 RUN apt-get update && apt-get install -y \
     python3-colcon-common-extensions \
     ros-humble-eigen3-cmake-module \
+    python3-vcstool \
+    python3-rosdep \
+    && rm -rf /var/lib/apt/lists/*
 # Install Python dependencies
 RUN pip3 install -U "empy==3.3.4" pyros-genmsg "setuptools<=65.5.1"
-
+# Download/clone and install the px4-ros2 bridge workspace
+WORKDIR /root/px4_ros_com_ros2/src
+RUN git clone https://github.com/PX4/px4_ros_com.git px4_ros_com && \
+    git clone https://github.com/PX4/px4_msgs.git px4_msgs
+# Source ROS2 setup and build the workspace
 # setup entrypoint
 COPY ./ros_entrypoint.sh /
+WORKDIR /root/px4_ros_com_ros2/src/px4_ros_com/scripts
+RUN ./build_ros2_workspace.bash
+WORKDIR /root
 
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
