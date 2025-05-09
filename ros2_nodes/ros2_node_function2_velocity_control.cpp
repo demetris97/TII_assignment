@@ -23,14 +23,27 @@ public:
     {
         rclcpp::QoS qos_profile(10);
         qos_profile.best_effort();
-
+        
+        //Publishers
         offboard_control_mode_publisher_ = this->create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
         trajectory_setpoint_publisher_ = this->create_publisher<TrajectorySetpoint>("/fmu/in/trajectory_setpoint", 10);
         vehicle_command_publisher_ = this->create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
+        intended_local_position_publisher_ = this->create_publisher<VehicleLocalPosition>("/controller/intended_local_position_input", 10);  // Use your desired topic name
 
+        //Subscribers
         vehicle_local_position_subscription_ = this->create_subscription<VehicleLocalPosition>(
             "/fmu/out/vehicle_local_position", qos_profile,
             std::bind(&OffboardControl::vehicle_local_position_callback, this, std::placeholders::_1));
+        // Intended waypoints are used only for plotting to compare them with actual trajectory.
+        intended_waypoint_counter_ = 0;
+        VehicleLocalPosition intended_waypoint_msg{};
+        intended_waypoints_ = {
+            {0.0f, 0.0f},
+            {3000.0f, 0.0f},
+            {3000.0f, 3000.0f},
+            {0.0f, 3000.0f},
+            {0.0f, 0.0f}
+        };
 
         offboard_setpoint_counter_ = 0;
         all_waypoints_reached_ = false;
@@ -38,7 +51,7 @@ public:
         current_velocity_ = {0.0f, 0.0f, -3.0f};  // Initial vertical descent
         current_yaw_ = 0.0f;
         segment_counter_ = 0;
-        segment_length_ = 50.0f;
+        segment_length_ = 3000.0f;
         takeoff_done_ = false;
 
         auto timer_callback = [this]() -> void {
@@ -57,6 +70,13 @@ public:
         };
 
         timer_ = this->create_wall_timer(100ms, timer_callback);
+
+        // Publish the intended waypoint. For visualization and comparison purposes
+        intended_waypoint_msg.x = intended_waypoints_[intended_waypoint_counter_][0];
+        intended_waypoint_msg.y = intended_waypoints_[intended_waypoint_counter_][1];
+        intended_waypoint_msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
+        intended_local_position_publisher_->publish(intended_waypoint_msg);
+        intended_waypoint_counter_++;
     }
 
     void arm();
@@ -77,7 +97,11 @@ private:
     rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
     rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
+    rclcpp::Publisher<VehicleLocalPosition>::SharedPtr intended_local_position_publisher_;
+
     rclcpp::Subscription<VehicleLocalPosition>::SharedPtr vehicle_local_position_subscription_;
+
+    std::vector<std::array<float, 2>> intended_waypoints_;
 
     uint64_t offboard_setpoint_counter_;
     bool all_waypoints_reached_;
@@ -88,7 +112,8 @@ private:
     float segment_start_z_;
     std::array<float, 3> current_velocity_;
     float current_yaw_;
-    int segment_counter_;
+    size_t segment_counter_;
+    int intended_waypoint_counter_; 
     float segment_length_;
     bool takeoff_done_;
 
@@ -184,33 +209,32 @@ void OffboardControl::check_segment_distance()
             segment_start_y_ = current_y_;
             segment_start_z_ = current_z_;
 
-            current_velocity_ = {20.0f, 0.0f, 0.0f};
+            current_velocity_ = {50.0f, 0.0f, 0.0f};
             current_yaw_ = 0.0f;
 
             RCLCPP_INFO(this->get_logger(), "Takeoff complete. Starting square path...");
         } else {
             // Still taking off
-            current_velocity_ = {0.0f, 0.0f, -3.0f};
+            current_velocity_ = {0.0f, 0.0f, -15.0f};
             current_yaw_ = 0.0f;
         }
         return;
     }
 
     //At the second waypoint (the 1st is 50m altitude after takeoff) we want the VTOL to have 500 height
-    if (current_z_ > -60.0f) {
-        current_velocity_[2] = -3.0f; // Climb at 1 m/s (NED: down is positive, up is negative)
+    if (current_z_ < -500.0f) {
+        current_velocity_[2] = 0.0f; // Climb at 1 m/s (NED: down is positive, up is negative)
     } else {
-        current_velocity_[2] = 0.0f;  // Stop climbing
+        current_velocity_[2] = -15.0f;  // Stop climbing
     }
 
     // Measure distance traveled in current leg
     float dx = current_x_ - segment_start_x_;
     float dy = current_y_ - segment_start_y_;
-    float dz = current_z_ - segment_start_z_;
-    float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    float distance = std::sqrt(dx * dx + dy * dy);
 
     float velocity = std::sqrt(std::pow(current_vx_, 2) + std::pow(current_vy_, 2) + std::pow(current_vz_, 2)); 
-    RCLCPP_INFO(this->get_logger(), "Segment %d | Distance: %.2f | Velocity: %.2f", segment_counter_, distance, velocity);
+    RCLCPP_INFO(this->get_logger(), "Segment %zu | Distance: %.2f | Velocity: %.2f", segment_counter_, distance, velocity);
 
     if (distance >= segment_length_) {
         segment_counter_++;
@@ -219,29 +243,50 @@ void OffboardControl::check_segment_distance()
             all_waypoints_reached_ = true;
             current_velocity_ = {0.0f, 0.0f, 0.0f};
             RCLCPP_INFO(this->get_logger(), "Completed square path.");
+            
+            // Publish the intended waypoint. For visualization and comparison purposes
+            VehicleLocalPosition intended_waypoint_msg{};
+            intended_waypoint_msg.x = intended_waypoints_[intended_waypoint_counter_][0];
+            intended_waypoint_msg.y = intended_waypoints_[intended_waypoint_counter_][1];
+            intended_waypoint_msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
+            intended_local_position_publisher_->publish(intended_waypoint_msg);
+            intended_waypoint_counter_++;
+
             land();
             rclcpp::sleep_for(10s);
             disarm();
             return;
         }
 
-        // Rotate 90° anticlockwise
-        current_yaw_ += M_PI_2;
+        // Rotate 90° anticlockwise and wrap the current_yaw in the range [-pi, pi]
+        current_yaw_ += M_PI_2; // M_PI_2 is a predefined constant fo pi/2
         if (current_yaw_ > M_PI) {
             current_yaw_ -= 2 * M_PI;
         }
 
         // Update velocity direction
-        current_velocity_[0] = 10.0f * std::cos(current_yaw_);
-        current_velocity_[1] = 10.0f * std::sin(current_yaw_);
+        current_velocity_[0] = 50.0f * std::cos(current_yaw_);
+        current_velocity_[1] = 50.0f * std::sin(current_yaw_);
         current_velocity_[2] = 0.0f;
 
         segment_start_x_ = current_x_;
         segment_start_y_ = current_y_;
         segment_start_z_ = current_z_;
 
-        RCLCPP_INFO(this->get_logger(), "Starting segment %d with velocity (%.2f, %.2f) and yaw %.2f",
+        RCLCPP_INFO(this->get_logger(), "Starting segment %zu with velocity (%.2f, %.2f) and yaw %.2f",
                     segment_counter_, current_velocity_[0], current_velocity_[1], current_yaw_);
+        
+        // Publish the intended waypoint. For visualization and comparison purposes
+        VehicleLocalPosition intended_waypoint_msg{};
+        intended_waypoint_msg.x = intended_waypoints_[intended_waypoint_counter_][0];
+        intended_waypoint_msg.y = intended_waypoints_[intended_waypoint_counter_][1];
+        intended_waypoint_msg.z = std::numeric_limits<float>::quiet_NaN();
+        intended_waypoint_msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
+        intended_local_position_publisher_->publish(intended_waypoint_msg);
+        RCLCPP_INFO(this->get_logger(), "Published simulated waypoint: (%.2f, %.2f)",
+                    intended_waypoint_msg.x, intended_waypoint_msg.y);
+        intended_waypoint_counter_++;
+ 
     }
 }
 
