@@ -41,13 +41,14 @@ public:
 
         // Waypoints: {x, y, z}
         waypoints_ = {
-            {0.0f, 0.0f, -50.0f, -3.14f},       // 1. Takeoff to 50m, facing south
-            {-50.0f, 0.0f, -50.0f, -3.14f},     // 2. Move forward (westward), same yaw
-            {-50.0f, 50.0f, -50.0f, 1.57f},     // 3. Turn right and go north, yaw east
-            {0.0f, 50.0f, -50.0f, 0.0f},        // 4. Turn right and go east, yaw north
-            {0.0f, 0.0f, -50.0f, -1.57f},       // 5. Complete square, face west
-            {0.0f, 0.0f, -10.0f, -1.57f}        // 6. Descend to 10m, same yaw
+            {0.0f, 0.0f, -50.0f, 0.0f},       // 1. Takeoff to 50m, facing south
+            {3000.0f, 0.0f, -500.0f, 0.0f},     // 2. Move forward (westward), same yaw
+            {3000.0f, 3000.0f, -500.0f, 1.57f},      // 3. Turn right and go north, yaw east
+            {0.0f, 3000.0f, -500.0f, 3.14f},        // 4. Turn right and go east, yaw north
+            {0.0f, 0.0f, -500.0f, -1.57f},        // 5. Complete square, face west
+            {0.0f, 0.0f, 0.0f, -1.57f}        // 6. decrease altitude
         };
+
 
         // Timer
         auto timer_callback = [this]() -> void {
@@ -56,7 +57,8 @@ public:
                 arm();
             }
 
-            check_waypoint_reached();
+            check_waypoint_reached(); // Checks the distance between the drone and the target point/waypoint. Sets new waypoints if previous has been reached. Land & disarm if all waypoints reached.
+
             publish_offboard_control_mode();
             publish_trajectory_setpoint();
 
@@ -114,11 +116,19 @@ void OffboardControl::land()
     publish_vehicle_command(VehicleCommand::VEHICLE_CMD_NAV_LAND);
     RCLCPP_INFO(this->get_logger(), "Land command sent");
 }
+/*
+void OffboardControl::vtol_takeoff()
+{
+    publish_vehicle_command(VehicleCommand::VEHICLE_CMD_NAV_VTOL_TAKEOFF, 0.0, 0.0, 0.0, 0.0, 47.39773615102264f,8.547064163497595f,15.0f);
+    RCLCPP_INFO(this->get_logger(), "VTOL takeoff command sent");
+
+}
+*/
 void OffboardControl::publish_offboard_control_mode()
 {
     OffboardControlMode msg{};
     msg.position = true;
-    msg.velocity = true;
+    msg.velocity = false;
     msg.acceleration = false;
     msg.attitude = false;
     msg.body_rate = false;
@@ -169,14 +179,13 @@ void OffboardControl::check_waypoint_reached()
     auto target = waypoints_[current_waypoint_index_];
     float dx = current_x_ - target[0];
     float dy = current_y_ - target[1];
-    float dz = current_z_ - target[2];
 
-    float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    float distance = std::sqrt(dx * dx + dy * dy);
 
-    RCLCPP_INFO(this->get_logger(), "Current Pos: (%.2f, %.2f, %.2f) | Target %zu -> (%.2f, %.2f, %.2f) | Distance: %.2f",
-                current_x_, current_y_, current_z_,
+    RCLCPP_INFO(this->get_logger(), "Current Pos: (%.2f, %.2f) | Target %zu -> (%.2f, %.2f) | Distance: %.2f",
+                current_x_, current_y_,
                 current_waypoint_index_,
-                target[0], target[1], target[2],
+                target[0], target[1], 
                 distance);
 
     if (distance < 1.0f) {
