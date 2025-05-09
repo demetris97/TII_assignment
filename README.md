@@ -26,13 +26,18 @@ From the terminal within the container, run the MicroXRCEAgent:
 $cd /Micro-XRCE-DDS-Agent/
 $MicroXRCEAgent udp4 -p 8888 
 
-6. Initiate the ROS2 workspace to run the ROS2 nodes for the assignment. e.g.:
-$cd ~/px4_ros_com_ros2
+6. Copy the ROS2 Node to the folder: /root/px4_ros_com_ros2/src/px4_ros_com/src/examples/offboard/offboard_control.cpp (the node must have the name: "offboard_control.cpp"). Initiate the ROS2 workspace to run the ROS2 nodes for the assignment. e.g.:
+$cd /root/px4_ros_com_ros2/src/px4_ros_com/scripts
+$./build_ros2_workspace.bash
 $source /opt/ros/humble/setup.bash
 $source /root/px4_ros_com_ros2/install/setup.bash
 $ros2 run px4_ros_com offboard_control => arms and lands the drone.
 
-ERRORS AND SOLUTIONS:
-1. Inside the original dockerfile for the assignment, specifying the version of ROS to be downloaded. This threw error while creating the image. I removed the version entirely.
-2. For some reason (didn't had time to troubleshoot), Gazebo did't installed directly from the dockerfile (I included the commands for Gazebo installation inside the Dockerfile). So, Gazebo needs manual installation from the docker container, using the following command:
-$curl -sSL http://get.gazebosim.org | sh
+7. For the plots:
+$ sudo apt install ros-humble-plotjuggler
+$ sudo apt install ros-humble-plotjuggler-ros
+Run the PlotJuggler with:
+$ source /opt/ros/humble/setup.bash
+$ source /root/px4_ros_com_ros2/install/setup.bash
+$ ros2 run plotjuggler plotjuggler
+
