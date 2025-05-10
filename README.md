@@ -29,10 +29,8 @@ $ MicroXRCEAgent udp4 -p 8888
 6. A ROS2 package has been created for the assignment. The package must be downloaded from the github folder that also has been created for the assignment (https://github.com/demetris97/interview_assignment). Copy the ROS2 package ("assignment_ros2_package") into the ROS2 workspace inside the docker container: /root/px4_ros_com_ros2 (the ROS package must have the name: "assignment_ros2_package"). Build the ROS2 workspace to run the ROS2 nodes for the assignment.
 #Run from host machine. Command to use to find the docker container id:
 $ docker ps      
-
 #Run from host machine. Command to copy the ROS package from the host machine to the ROS workspace inside the docker container
 $ docker cp /host_machine_path_to_the_downloaded_ROS2_package/assignment_ros2_package <docker_container_id>:/root/px4_ros_com_ros2/src/assignment_ros2_package           
-
 #Run the following command from within the docker container to build the ROS workspace and run the autonomous missions for the assignment.
 $ cd /root/px4_ros_com_ros2/src/px4_ros_com/scripts
 $ ./build_ros2_workspace.bash
