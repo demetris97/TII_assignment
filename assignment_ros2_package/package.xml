@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>assignment_ros2_package</name>
+  <version>0.0.1</version>
+  <description>Two ROS2 nodes for PX4 control: position and velocity.</description>
+
+  <maintainer email="your@email.com">Your Name</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <exec_depend>px4_msgs</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
