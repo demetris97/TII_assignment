@@ -41,7 +41,7 @@ $ source /root/px4_ros_com_ros2/install/setup.bash
 $ ros2 run assignment_ros2_package ros2_node_function1_position_control       #to run the position control node (autonomous mission) 
 $ ros2 run assignment_ros2_package ros2_node_function2_velocity_control       #to run the velocity control node (autonomous mission)
 
-8. For the plots:
+7. For the plots:
 $ sudo apt install ros-humble-plotjuggler
 $ sudo apt install ros-humble-plotjuggler-ros
 Run the PlotJuggler with:
