@@ -179,8 +179,8 @@ void OffboardControl::check_waypoint_reached()
     auto target = waypoints_[current_waypoint_index_];
     float dx = current_x_ - target[0];
     float dy = current_y_ - target[1];
-
-    float distance = std::sqrt(dx * dx + dy * dy);
+    float dz = current_z_ - target[2];
+    float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
 
     RCLCPP_INFO(this->get_logger(), "Current Pos: (%.2f, %.2f) | Target %zu -> (%.2f, %.2f) | Distance: %.2f",
                 current_x_, current_y_,
