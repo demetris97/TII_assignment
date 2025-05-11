@@ -16,6 +16,7 @@ using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
 
+//ROS2 node class for velocity control
 class OffboardControl : public rclcpp::Node
 {
 public:
@@ -34,6 +35,7 @@ public:
         vehicle_local_position_subscription_ = this->create_subscription<VehicleLocalPosition>(
             "/fmu/out/vehicle_local_position", qos_profile,
             std::bind(&OffboardControl::vehicle_local_position_callback, this, std::placeholders::_1));
+        
         // Intended waypoints are used only for plotting to compare them with actual trajectory.
         intended_waypoint_counter_ = 0;
         VehicleLocalPosition intended_waypoint_msg{};
@@ -45,6 +47,7 @@ public:
             {0.0f, 0.0f}
         };
 
+        //Control state initialization 
         offboard_setpoint_counter_ = 0;
         all_waypoints_reached_ = false;
 
@@ -54,21 +57,23 @@ public:
         segment_length_ = 3000.0f;
         takeoff_done_ = false;
 
+        //Timer callback running at 10Hz
         auto timer_callback = [this]() -> void {
             if (offboard_setpoint_counter_ == 10) {
                 publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6); // PX4_MODE_OFFBOARD
                 arm();
             }
 
-            check_segment_distance();
-            publish_offboard_control_mode();
-            publish_trajectory_setpoint();
+            check_segment_distance(); //Manage waypoints transition
+            publish_offboard_control_mode(); //Send offboard control mode message
+            publish_trajectory_setpoint(); //Send velocity and yaw command 
 
             if (offboard_setpoint_counter_ < 11) {
                 offboard_setpoint_counter_++;
             }
         };
 
+        //Set up timer
         timer_ = this->create_wall_timer(100ms, timer_callback);
 
         // Publish the intended waypoint. For visualization and comparison purposes
@@ -79,10 +84,11 @@ public:
         intended_waypoint_counter_++;
     }
 
+    //Command functions
     void arm();
     void disarm();
     void land();
-
+    //Initialization of variables
     float current_x_;
     float current_y_;
     float current_z_;
@@ -93,7 +99,7 @@ public:
 
 private:
     rclcpp::TimerBase::SharedPtr timer_;
-
+    //Publishers and Subscribers
     rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
     rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
@@ -110,13 +116,14 @@ private:
     float segment_start_x_;
     float segment_start_y_;
     float segment_start_z_;
-    std::array<float, 3> current_velocity_;
-    float current_yaw_;
-    size_t segment_counter_;
+    std::array<float, 3> current_velocity_; //Current velocity command
+    float current_yaw_; //Yaw command
+    size_t segment_counter_; //Which segment of the square
     int intended_waypoint_counter_; 
     float segment_length_;
     bool takeoff_done_;
 
+    //Helper functions
     void publish_offboard_control_mode();
     void publish_trajectory_setpoint();
     void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0);
@@ -124,24 +131,28 @@ private:
     void check_segment_distance();
 };
 
+//Send arm command
 void OffboardControl::arm()
 {
     publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0);
     RCLCPP_INFO(this->get_logger(), "Arm command sent");
 }
 
+//Send disarm command
 void OffboardControl::disarm()
 {
     publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0);
     RCLCPP_INFO(this->get_logger(), "Disarm command sent");
 }
 
+//Send land command
 void OffboardControl::land()
 {
     publish_vehicle_command(VehicleCommand::VEHICLE_CMD_NAV_LAND);
     RCLCPP_INFO(this->get_logger(), "Land command sent");
 }
 
+//Send control mode for velocity control
 void OffboardControl::publish_offboard_control_mode()
 {
     OffboardControlMode msg{};
@@ -154,6 +165,7 @@ void OffboardControl::publish_offboard_control_mode()
     offboard_control_mode_publisher_->publish(msg);
 }
 
+//Send current velocity setpoint
 void OffboardControl::publish_trajectory_setpoint()
 {
     if (all_waypoints_reached_) return;
@@ -172,6 +184,7 @@ void OffboardControl::publish_trajectory_setpoint()
     trajectory_setpoint_publisher_->publish(msg);
 }
 
+//Set up and publish vehicle command
 void OffboardControl::publish_vehicle_command(uint16_t command, float param1, float param2)
 {
     VehicleCommand msg{};
@@ -187,6 +200,7 @@ void OffboardControl::publish_vehicle_command(uint16_t command, float param1, fl
     vehicle_command_publisher_->publish(msg);
 }
 
+//Callback to update the current position and velocity of the drone based on sensor feedback
 void OffboardControl::vehicle_local_position_callback(const VehicleLocalPosition::SharedPtr msg)
 {
     current_x_ = msg->x;
@@ -197,10 +211,12 @@ void OffboardControl::vehicle_local_position_callback(const VehicleLocalPosition
     current_vz_ = msg->vz;
 }
 
+//Check how far the drone traveled in current segment and swithc to the next segment if 3km have been covered
 void OffboardControl::check_segment_distance()
 {
     if (all_waypoints_reached_) return;
 
+    //Handle takeoff logic: ascend to -50 meters altitude (NED)
     if (!takeoff_done_) {
         float dz = current_z_ - (-50.0f);  // Assuming target altitude is -50m (NED)
         if (std::fabs(dz) < 1.0f) {
@@ -221,14 +237,14 @@ void OffboardControl::check_segment_distance()
         return;
     }
 
-    //At the second waypoint (the 1st is 50m altitude after takeoff) we want the VTOL to have 500 height
+    //At the second waypoint (the 1st was 50m altitude after takeoff) we want the VTOL to have 500 height
     if (current_z_ < -500.0f) {
-        current_velocity_[2] = 0.0f; // Climb at 1 m/s (NED: down is positive, up is negative)
+        current_velocity_[2] = 0.0f; // Stop increasing the altitude (NED: down is positive, up is negative)
     } else {
-        current_velocity_[2] = -15.0f;  // Stop climbing
+        current_velocity_[2] = -15.0f;  // Continue increasing the altitude (NED: down is poitive, up is negative)
     }
 
-    // Measure distance traveled in current leg
+    // Measure distance traveled in current segment
     float dx = current_x_ - segment_start_x_;
     float dy = current_y_ - segment_start_y_;
     float distance = std::sqrt(dx * dx + dy * dy);
@@ -239,6 +255,7 @@ void OffboardControl::check_segment_distance()
     if (distance >= segment_length_) {
         segment_counter_++;
 
+        //Square path complete
         if (segment_counter_ >= 4) {
             all_waypoints_reached_ = true;
             current_velocity_ = {0.0f, 0.0f, 0.0f};
