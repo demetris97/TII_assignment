@@ -1,5 +1,5 @@
 HOW TO RUN THE SIMULATION:
-1. Enable access to xhost from the container:
+1. Enable access to xhost from the container: 
 $ xhost +local:root
 
 2. From within the folder that includes the Dockerfile and the entrypoint.sh ("docker_folder", the folder is inside the github repository that has been created for the assignment: https://github.com/demetris97/interview_assignment/tree/main), run the following command to build the docker image:
