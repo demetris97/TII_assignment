@@ -1,4 +1,4 @@
-# This is an auto generated Dockerfile for ros:ros-core
+# This is an auto generated Dockerfile for ros:ros-core 
 # generated from docker_images_ros2/create_ros_core_image.Dockerfile.em
 FROM ubuntu:jammy
 
