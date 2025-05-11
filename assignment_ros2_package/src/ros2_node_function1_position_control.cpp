@@ -15,6 +15,7 @@ using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
 
+// Main class for control
 class OffboardControl : public rclcpp::Node
 {
 public:
@@ -58,10 +59,11 @@ public:
             }
 
             check_waypoint_reached(); // Checks the distance between the drone and the target point/waypoint. Sets new waypoints if previous has been reached. Land & disarm if all waypoints reached.
-
+            // Send contorl messages
             publish_offboard_control_mode();
             publish_trajectory_setpoint();
 
+            // Increase the counter up to 10. Just needed to arm the drone after 1 second.
             if (offboard_setpoint_counter_ < 11) {
                 offboard_setpoint_counter_++;
             }
@@ -70,9 +72,9 @@ public:
         timer_ = this->create_wall_timer(100ms, timer_callback);
     }
 
-    void arm();
-    void disarm();
-    void land();
+    void arm(); // Arm the drone
+    void disarm(); // Disarm the drone
+    void land(); //Land the drone
 
     // Initialization of current position variables
     float current_x_;
@@ -80,18 +82,22 @@ public:
     float current_z_;
 
 private:
-    rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::TimerBase::SharedPtr timer_; // Timer object
 
+    //Publishers
     rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
     rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
+
+    //Subscriber
     rclcpp::Subscription<VehicleLocalPosition>::SharedPtr vehicle_local_position_subscription_;
 
-    uint64_t offboard_setpoint_counter_;
+    uint64_t offboard_setpoint_counter_; //Counter to initiate arming after 1 second
     std::vector<std::array<float, 4>> waypoints_; // {x,y,z,yaw}
-    size_t current_waypoint_index_;
-    bool all_waypoints_reached_;
+    size_t current_waypoint_index_; //Current waypoint index
+    bool all_waypoints_reached_; //Flag that indicates mission completion
 
+    //Helper functions
     void publish_offboard_control_mode();
     void publish_trajectory_setpoint();
     void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0);
@@ -100,23 +106,27 @@ private:
     void check_waypoint_reached();
 };
 
+//Send arm command
 void OffboardControl::arm()
 {
     publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0);
     RCLCPP_INFO(this->get_logger(), "Arm command sent");
 }
 
+//Send disarm command
 void OffboardControl::disarm()
 {
     publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0);
     RCLCPP_INFO(this->get_logger(), "Disarm command sent");
 }
+
+//Send Land command
 void OffboardControl::land()
 {
     publish_vehicle_command(VehicleCommand::VEHICLE_CMD_NAV_LAND);
     RCLCPP_INFO(this->get_logger(), "Land command sent");
 }
-/*
+/* Included for transition to Fixed-wing mode of the VTOL. Many attemps have been done but something was not leting the drone to switch to Fixed-wing mode.
 void OffboardControl::vtol_takeoff()
 {
     publish_vehicle_command(VehicleCommand::VEHICLE_CMD_NAV_VTOL_TAKEOFF, 0.0, 0.0, 0.0, 0.0, 47.39773615102264f,8.547064163497595f,15.0f);
@@ -124,6 +134,8 @@ void OffboardControl::vtol_takeoff()
 
 }
 */
+
+//Publish control mode message
 void OffboardControl::publish_offboard_control_mode()
 {
     OffboardControlMode msg{};
@@ -136,6 +148,7 @@ void OffboardControl::publish_offboard_control_mode()
     offboard_control_mode_publisher_->publish(msg);
 }
 
+//Publish next target waypoint as trajectory setpoint
 void OffboardControl::publish_trajectory_setpoint()
 {
     if (all_waypoints_reached_ || current_waypoint_index_ >= waypoints_.size()) {
@@ -150,6 +163,7 @@ void OffboardControl::publish_trajectory_setpoint()
     trajectory_setpoint_publisher_->publish(msg);
 }
 
+//Publish general vehicle command
 void OffboardControl::publish_vehicle_command(uint16_t command, float param1, float param2)
 {
     VehicleCommand msg{};
@@ -165,6 +179,7 @@ void OffboardControl::publish_vehicle_command(uint16_t command, float param1, fl
     vehicle_command_publisher_->publish(msg);
 }
 
+//Callback to update the drone's current position from sensor feedback
 void OffboardControl::vehicle_local_position_callback(const VehicleLocalPosition::SharedPtr msg)
 {
     current_x_ = msg->x;
@@ -172,6 +187,7 @@ void OffboardControl::vehicle_local_position_callback(const VehicleLocalPosition
     current_z_ = msg->z;
 }
 
+//Check if current waypoint is reached and update to next
 void OffboardControl::check_waypoint_reached()
 {
     if (all_waypoints_reached_ || current_waypoint_index_ >= waypoints_.size()) return;
@@ -182,16 +198,19 @@ void OffboardControl::check_waypoint_reached()
     float dz = current_z_ - target[2];
     float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
 
+    //Log current and target position
     RCLCPP_INFO(this->get_logger(), "Current Pos: (%.2f, %.2f) | Target %zu -> (%.2f, %.2f) | Distance: %.2f",
                 current_x_, current_y_,
                 current_waypoint_index_,
                 target[0], target[1], 
                 distance);
 
+    //If close enough to target waypoint, switch to the next waypoint
     if (distance < 1.0f) {
         RCLCPP_INFO(this->get_logger(), "Reached waypoint %zu", current_waypoint_index_);
         current_waypoint_index_++;
 
+        //Checks if the autonomous mission is completed in order to land and disarm
         if (current_waypoint_index_ >= waypoints_.size()) {
             all_waypoints_reached_ = true;
             RCLCPP_INFO(this->get_logger(), "All waypoints reached.");
@@ -202,7 +221,6 @@ void OffboardControl::check_waypoint_reached()
         }
     }
 }
-
 
 int main(int argc, char *argv[])
 {
